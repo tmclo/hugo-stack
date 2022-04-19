@@ -1,8 +1,0 @@
-[manager]
-foo.example.com
-bar.example.com
-
-[workers]
-one.example.com
-two.example.com
-three.example.com

@@ -35,6 +35,37 @@ resource "aws_subnet" "hugo-subnet" {
   }
 }
 
+resource "aws_internet_gateway" "gw" {
+  vpc_id = aws_vpc.hugo.id
+
+  tags = {
+    Name = "main"
+  }
+}
+
+resource "aws_route_table" "hugo-route-table" {
+  vpc_id = aws_vpc.hugo.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.gw.id
+  }
+
+  route {
+      ipv6_cidr_block = "::/0"
+      gateway_id = aws_internet_gateway.gw.id
+  }
+
+  tags = {
+    Name = "hugo route table"
+  }
+}
+
+resource "aws_route_table_association" "assoc" {
+  subnet_id      = aws_subnet.hugo-subnet.id
+  route_table_id = aws_route_table.hugo-route-table.id
+}
+
 resource "aws_security_group" "allow_web" {
   name        = "allow_web"
   description = "Allow HTTP(s) inbound traffic"
@@ -103,6 +134,11 @@ resource "aws_instance" "docker1" {
   associate_public_ip_address = true
   subnet_id = aws_subnet.hugo-subnet.id
   vpc_security_group_ids = [ aws_security_group.allow_web.id ]
+  key_name = aws_key_pair.my_key.key_name
+
+  provisioner "local-exec" {
+    command = "echo [manager] >> ./hosts && echo ${aws_instance.docker1.public_ip} >> ./hosts && echo [worker] >> ./hosts"
+  }
 
   tags = {
     Name = "Docker1-swarm"
@@ -116,6 +152,11 @@ resource "aws_instance" "docker2" {
   associate_public_ip_address = true
   subnet_id = aws_subnet.hugo-subnet.id
   vpc_security_group_ids = [ aws_security_group.allow_web.id ]
+  key_name = aws_key_pair.my_key.key_name
+
+  provisioner "local-exec" {
+    command = "echo ${aws_instance.docker2.public_ip} >> ./hosts"
+  }
 
   tags = {
     Name = "Docker2-swarm"
@@ -145,4 +186,12 @@ resource "aws_volume_attachment" "ebs_att2" {
   device_name = "/dev/sdh"
   volume_id   = aws_ebs_volume.hugostorage.id
   instance_id = aws_instance.docker2.id
+}
+
+output "docker1-ip" {
+  value = "${aws_instance.docker1.public_ip}"
+}
+
+output "docker2-ip" {
+  value = "${aws_instance.docker2.public_ip}"
 }
