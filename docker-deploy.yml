@@ -1,0 +1,16 @@
+- hosts: managers
+  tasks:
+    - name: create volume
+      become: yes
+      ansible.builtin.shell: mkdir -p /vol/hugo
+    - name: copying docker-compose.yml
+      become: yes
+      copy:
+        src: ./docker-compose.yml
+        dest: /opt
+        owner: root
+        group: root        
+        mode: 0775
+    - name: run docker service
+      ansible.builtin.shell: docker stack deploy -c /opt/docker-compose.yml hugo
+      become: yes

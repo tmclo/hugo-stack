@@ -8,12 +8,12 @@ terraform {
 }
 
 provider "aws" {
-  shared_credentials_file = "/Users/rtbt/.aws/creds"
+  shared_credentials_file = "~/.aws/creds"
 }
 
 resource "aws_key_pair" "my_key" {
   key_name = "tf_key"
-  public_key = file("/Users/rtbt/.ssh/id_ed25519.pub")
+  public_key = file("~/.ssh/id_ed25519.pub")
 }
 
 resource "aws_vpc" "hugo" {
@@ -98,6 +98,15 @@ resource "aws_security_group" "allow_web" {
     ipv6_cidr_blocks = [ "::/0" ]
   }
 
+  ## Allow traffic between nodes in the VPC
+  ingress {
+      description = "All traffic between nodes in VPC"
+      from_port = 0
+      to_port = 0
+      protocol = "-1"
+      cidr_blocks = [ "10.0.0.0/8" ]
+  }
+
   egress {
     from_port        = 0
     to_port          = 0
@@ -127,6 +136,8 @@ data "aws_ami" "ubuntu" {
   owners = ["099720109477"]
 }
 
+## Create managers
+
 resource "aws_instance" "docker1" {
   ami           = data.aws_ami.ubuntu.id
   instance_type = "a1.medium"
@@ -137,13 +148,15 @@ resource "aws_instance" "docker1" {
   key_name = aws_key_pair.my_key.key_name
 
   provisioner "local-exec" {
-    command = "echo [manager] >> ./hosts && echo ${aws_instance.docker1.public_ip} >> ./hosts && echo [worker] >> ./hosts"
+    command = "echo ${aws_instance.docker1.public_ip} >> ./ips"
   }
 
   tags = {
     Name = "Docker1-swarm"
   }
 }
+
+## Create workers
 
 resource "aws_instance" "docker2" {
   ami           = data.aws_ami.ubuntu.id
@@ -155,7 +168,7 @@ resource "aws_instance" "docker2" {
   key_name = aws_key_pair.my_key.key_name
 
   provisioner "local-exec" {
-    command = "echo ${aws_instance.docker2.public_ip} >> ./hosts"
+    command = "echo ${aws_instance.docker2.public_ip} >> ./ips"
   }
 
   tags = {
@@ -180,12 +193,50 @@ resource "aws_volume_attachment" "ebs_att1" {
   device_name = "/dev/sdh"
   volume_id   = aws_ebs_volume.hugostorage.id
   instance_id = aws_instance.docker1.id
+
+  connection {
+    type     = "ssh"
+    user     = "ubuntu"
+    private_key = file("~/.ssh/id_ed25519")
+    host     = aws_instance.docker1.public_ip
+  }
+
+  provisioner "file" {
+    source      = "scripts/ebs-mount.sh"
+    destination = "/tmp/ebs-mount.sh"
+  }
+  
+  provisioner "remote-exec" {
+    inline = [
+      "chmod +x /tmp/ebs-mount.sh",
+      "sudo /tmp/ebs-mount.sh",
+    ]
+  }
 }
 
 resource "aws_volume_attachment" "ebs_att2" {
   device_name = "/dev/sdh"
   volume_id   = aws_ebs_volume.hugostorage.id
   instance_id = aws_instance.docker2.id
+
+  connection {
+    type     = "ssh"
+    user     = "ubuntu"
+    private_key = file("~/.ssh/id_ed25519")
+    host     = aws_instance.docker2.public_ip
+  }
+
+  provisioner "file" {
+    source      = "scripts/ebs-mount.sh"
+    destination = "/tmp/ebs-mount.sh"
+  }
+  
+  provisioner "remote-exec" {
+    inline = [
+      "chmod +x /tmp/ebs-mount.sh",
+      "sudo /tmp/ebs-mount.sh",
+    ]
+  }
 }
 
 output "docker1-ip" {

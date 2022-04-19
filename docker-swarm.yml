@@ -1,0 +1,92 @@
+- hosts: all
+  tasks:
+    - name: Get Docker key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+      become: yes
+      tags: docker
+
+    - name: Install a list of packages
+      become: yes
+      apt:
+        update_cache: yes
+        pkg:
+          - apt-transport-https
+          - aptitude
+          - ca-certificates
+          - curl
+          - libffi-dev
+          - libssl-dev
+          - python3
+          - python-is-python3
+          - software-properties-common
+          - python3-pip
+
+    - name: Add Docker packages to Repository
+      become: yes
+      apt_repository:
+        repo: deb [arch=arm64] https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename|lower }} stable
+      tags: docker
+
+    - name: Install docker
+      become: yes
+      apt:
+        update_cache: yes
+        pkg:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose
+
+    - name: Start docker service
+      become: yes
+      service: name=docker enabled=yes state=started
+
+    - name: Start containerd service
+      become: yes
+      service: name=containerd enabled=yes state=started
+
+    - name: Install docker python package
+      become: yes
+      pip:
+        name: docker
+
+- hosts: managers
+  tasks:
+
+    - name: initialize Docker swarm
+      become: yes
+      command: docker swarm init --advertise-addr '{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:2377'
+      register: docker_swarm_init
+        
+    - name: get Docker swarm worker token
+      become: yes
+      command: docker swarm join-token -q worker
+      register: docker_swarm_new_worker_token
+      when: not docker_swarm_manager_token is defined and not docker_swarm_worker_token is defined
+
+    - name: create local directory for Docker swarm tokens
+      local_action: command mkdir -p './files/docker-swarm'
+      become: no
+      when: not docker_swarm_manager_token is defined and not docker_swarm_worker_token is defined
+
+    - name: save Docker swarm manager ip
+      local_action: shell echo '{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}' >'./files/docker-swarm/manager-ip.txt'
+      become: no
+      when: not docker_swarm_manager_token is defined and not docker_swarm_worker_token is defined
+
+    - name: save Docker swarm worker token
+      local_action: shell echo '{{ docker_swarm_new_worker_token.stdout }}' >'./files/docker-swarm/worker-token.txt'
+      become: no
+      when: not docker_swarm_manager_token is defined and not docker_swarm_worker_token is defined
+
+- hosts: workers
+  vars:
+    manager_ip: "{{ lookup('file', './files/docker-swarm/manager-ip.txt') }}"
+    worker_token: "{{ lookup('file', './files/docker-swarm/worker-token.txt') }}"
+  tasks:
+    - name: join Docker swarm as worker
+      become: yes
+      command: docker swarm join --advertise-addr '{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:2377' --token '{{ worker_token }}' '{{ manager_ip }}:2377'
+

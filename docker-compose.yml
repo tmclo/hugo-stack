@@ -1,0 +1,125 @@
+version: "3.7"
+
+services:
+  traefik:
+    image: traefik:v2.2
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 5s
+        order: stop-first
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 10
+        window: 15s
+      labels:
+         - "traefik.enable=true"
+         - "traefik.http.services.traefik-gui.loadbalancer.server.port=8080"
+         - "traefik.http.routers.traefik-gui.rule=Host(`traefik.example.com`)" # traefik dashboard url
+         - "traefik.http.routers.traefik-gui.entrypoints=websecure"
+         - "traefik.http.routers.traefik-gui.service=api@internal"
+         - "traefik.http.routers.traefik-gui.middlewares=traefik-gui-auth"
+         - "traefik.http.middlewares.traefik-gui-auth.basicauth.realm=MyPrivateRealm"
+         - "traefik.http.middlewares.traefik-auth.basicauth.users=admin:$apr1$xuc9z8ky$dgM37Rz7WUsAmzwc7Ni/01" # user:admin, pass:admin
+      placement:
+        constraints:
+          - node.role == manager
+    command:
+      - "--log=true"
+      - "--log.level=debug" # PANIC, FATAL, ERROR, WARN, INFO, DEBUG
+      - "--accesslog=true"
+      - "--api.insecure=true"
+      - "--api.debug=true"
+      - "--providers.docker=true"
+      - "--providers.docker.swarmMode=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.websecure.http.tls=true"
+      ## Certificate Resolver: cloudflare, type=dnsChallenge
+      - "--certificatesResolvers.myCloudflare.acme.email=EMAIL ADDRESS" # place your email here
+      - "--certificatesResolvers.myCloudflare.acme.storage=/data/acme.json"
+      # - "--certificatesResolvers.myCloudflare.acme.caServer=https://acme-staging-v02.api.letsencrypt.org/directory" # Staging. Comment this for Production.
+      - "--certificatesResolvers.myCloudflare.acme.dnsChallenge=true"
+      - "--certificatesResolvers.myCloudflare.acme.dnsChallenge.provider=cloudflare"
+      - "--certificatesResolvers.myCloudflare.acme.dnsChallenge.resolvers=1.1.1.1:53,8.8.8.8:53"
+    environment:
+      CF_API_EMAIL: CLOUDFLARE EMAIL ADDRESS
+      CF_DNS_API_TOKEN: CLOUDFLARE API KEY
+    ports:
+      - published: 80
+        target: 80
+        protocol: tcp
+        mode: host
+      - published: 443
+        target: 443
+        protocol: tcp
+        mode: host
+      - published: 8080
+        target: 8080
+        mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt_data:/data
+    networks:
+      - hugonet
+
+  hugo:
+    image: klakegg/hugo:asciidoctor
+    deploy:
+      replicas: 12
+      update_config:
+        parallelism: 1
+        delay: 5s
+        order: start-first
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 10
+        window: 15s
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=hugonet"
+        - "traefik.http.services.web.loadbalancer.server.port=1313"
+        ### Middlewares
+        # https-redir
+        - "traefik.http.middlewares.https-redir.redirectscheme.scheme=https"
+        - "traefik.http.middlewares.https-redir.redirectscheme.permanent=true"
+        # www-redir
+        - "traefik.http.middlewares.www-redir.redirectregex.regex=^https://www.(.*)"
+        - "traefik.http.middlewares.www-redir.redirectregex.replacement=https://$${1}"
+        - "traefik.http.middlewares.www-redir.redirectregex.permanent=true"
+        ### Entrypoints
+        # web
+        - "traefik.http.routers.web.rule=Host(`example.com`)"
+        - "traefik.http.routers.web.entrypoints=web"
+        - "traefik.http.routers.web.middlewares=https-redir@docker"
+        # websecure
+        - "traefik.http.routers.web-02.rule=Host(`example.com`)"
+        - "traefik.http.routers.web-02.entrypoints=websecure"
+        - "traefik.http.routers.web-02.middlewares=www-redir@docker"
+        - "traefik.http.routers.web-02.tls=true"
+        - "traefik.http.routers.web-02.tls.certresolver=myCloudflare"
+        - "traefik.http.routers.web-02.tls.domains[0].main=example.com"
+        - "traefik.http.routers.web-02.tls.domains[0].sans=*.example.com"
+    volumes:
+      - /vol/hugo:/src
+    networks:
+      - hugonet
+
+
+volumes:
+  letsencrypt_data:
+    driver: local
+    driver_opts:
+       o: bind
+       type: none
+       device: /data/letsencrypt_data
+
+networks:
+  hugonet:
+    driver: overlay
+    driver_opts:
+      encrypted: ""
