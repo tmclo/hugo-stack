@@ -8,7 +8,7 @@ terraform {
 }
 
 provider "aws" {
-  shared_credentials_file = "~/.aws/creds"
+  shared_credentials_file = file("~/.aws/creds")
 }
 
 resource "aws_key_pair" "my_key" {
