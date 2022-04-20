@@ -1,5 +1,7 @@
 # High Availability Hugo Static Site
 
+Read the in-depth tutorial on my website! [**HA Hugo Stack**](https://tmclo.dev/blog/ha-hugo-stack/)
+
 This is an example of creating a high-availability hugo cluster utilising Docker Swarm, Nginx & Traefik
 
 The deployment of the infrastructure is managed using Terraform whilst the configuration for Docker Swarm and deploying the hugo cluster is managed with ansible.
