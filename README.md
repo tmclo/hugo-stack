@@ -1,6 +1,6 @@
 # High Availability Hugo Static Site
 
-Read the in-depth tutorial on my website! [**HA Hugo Stack**](https://tmclo.dev/blog/ha-hugo-stack/)
+[**Read the in-depth tutorial on my website!**](https://tmclo.dev/blog/ha-hugo-stack/)
 
 This is an example of creating a high-availability hugo cluster utilising Docker Swarm, Nginx & Traefik
 
