@@ -69,7 +69,25 @@ services:
   hugo:
     image: klakegg/hugo:asciidoctor
     deploy:
-      replicas: 12
+      replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 5s
+        order: start-first
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 10
+        window: 15s
+    volumes:
+      - /vol/hugo:/src
+    networks:
+      - hugonet
+
+  web:
+    image: nginx:stable-alpine
+    deploy:
+      replicas: 2 # UPDATE ACCORDING TO THE SIZE OF SWARM!!!
       update_config:
         parallelism: 1
         delay: 5s
@@ -81,8 +99,8 @@ services:
         window: 15s
       labels:
         - "traefik.enable=true"
-        - "traefik.docker.network=hugonet"
-        - "traefik.http.services.web.loadbalancer.server.port=1313"
+        - "traefik.docker.network=nw-web"
+        - "traefik.http.services.web.loadbalancer.server.port=80"
         ### Middlewares
         # https-redir
         - "traefik.http.middlewares.https-redir.redirectscheme.scheme=https"
@@ -105,10 +123,9 @@ services:
         - "traefik.http.routers.web-02.tls.domains[0].main=example.com"
         - "traefik.http.routers.web-02.tls.domains[0].sans=*.example.com"
     volumes:
-      - /vol/hugo:/src
+      - /vol/hugo/public:/var/www/html
     networks:
       - hugonet
-
 
 volumes:
   letsencrypt_data:

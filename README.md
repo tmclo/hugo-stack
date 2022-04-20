@@ -1,5 +1,5 @@
 # hugo-stack
-This is an example of creating a high-availability hugo cluster utilising Docker Swarm & Traefik
+This is an example of creating a high-availability hugo cluster utilising Docker Swarm, Nginx & Traefik
 
 The deployment of the infrastructure is managed using Terraform whilst the configuration for Docker Swarm and deploying the hugo cluster is managed with ansible.
 
@@ -27,6 +27,13 @@ Once this has hopefully completed successfully without any errors you're ready t
 The next step will be to read through the `docker-compose.yml` file and changing every section that applies, MAKE SURE YOU CHECK THE `LABELS` SECTION FOR EACH SERVICE!
 
 In this file there's multiple places which you will need to modify, search "example.com" to find the entries where you need to specify your own domain name, then you must also update the cloudflare API key and EMAIL in order for traefik to issue certificates properly.
+
+You can update the domain accordingly using the following command,
+```
+sed -i 's/example.com/YOURDOMAIN.COM/g' docker-compose.yml
+```
+
+However you must still update the CLOUDFLARE API section in order to be able to properly issue SSL certificates, you may also use different methods of ACME validation, to do so first lookup information on how to do so with Traefik; it relies on <5 lines to modify this.
 
 Run the following to deploy the hugo stack from the `docker-compose.yml` file,
 ```
